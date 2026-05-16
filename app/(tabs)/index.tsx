@@ -1,22 +1,41 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { LineChart } from "react-native-chart-kit";
 
 export default function HomeScreen() {
-  const [price, setPrice] = useState<string | null>(null);
+  const [price, setPrice] = useState<number | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [image, setImage] = useState<string | null>(null);
+  const [history, setHistory] = useState<number[]>([]);
 
   useEffect(() => {
-    fetch("https://snk-server.onrender.com/price")
-      .then((res) => res.json())
-      .then((data) => {
-        setPrice(data.price);
-        setName(data.name);
-        setImage(data.image);
-      })
-      .catch((err) => {
-        console.error(err);
-      });
+    const fetchData = () => {
+      fetch("https://snk-server.onrender.com/price")
+        .then((res) => res.json())
+        .then((data) => {
+          const newPrice = Number(data.price);
+
+          setPrice(newPrice);
+          setName(data.name);
+          setImage(data.image);
+
+          setHistory((prev) => [...prev.slice(-9), newPrice]);
+        })
+        .catch((err) => console.error(err));
+    };
+
+    fetchData();
+
+    const interval = setInterval(fetchData, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   if (!price) {
@@ -37,7 +56,28 @@ export default function HomeScreen() {
 
       <Text style={styles.name}>{name}</Text>
 
-      <Text style={styles.price}>{price} 円</Text>
+      <Text style={styles.price}>{price.toLocaleString()} 円</Text>
+
+      {history.length > 1 && (
+        <LineChart
+          data={{
+            labels: history.map((_, i) => `${i + 1}`),
+            datasets: [{ data: history }],
+          }}
+          width={Dimensions.get("window").width - 40}
+          height={220}
+          yAxisSuffix="円"
+          chartConfig={{
+            backgroundColor: "#ffffff",
+            backgroundGradientFrom: "#ffffff",
+            backgroundGradientTo: "#ffffff",
+            decimalPlaces: 0,
+            color: () => "#000",
+            labelColor: () => "#000",
+          }}
+          style={styles.chart}
+        />
+      )}
     </View>
   );
 }
@@ -48,41 +88,43 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 20,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fff",
   },
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fff",
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 20,
-    color: "#000000",
+    color: "#000",
   },
   loading: {
     marginTop: 10,
-    fontSize: 16,
-    color: "#000000",
+    color: "#000",
   },
   name: {
     fontSize: 18,
-    marginVertical: 10,
+    marginTop: 10,
     textAlign: "center",
-    color: "#000000",
+    color: "#000",
   },
   price: {
     fontSize: 28,
     fontWeight: "bold",
     marginTop: 10,
-    color: "#000000",
+    color: "#000",
   },
   image: {
     width: 200,
     height: 200,
-    resizeMode: "contain",
     marginVertical: 10,
+    resizeMode: "contain",
+  },
+  chart: {
+    marginTop: 20,
+    borderRadius: 10,
   },
 });
