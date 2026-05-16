@@ -21,7 +21,7 @@ type Product = {
 const STORAGE_KEY = "product_ids";
 
 export default function HomeScreen() {
-  const [ids, setIds] = useState<string[]>(["618443"]);
+  const [ids, setIds] = useState<string[]>(["730956"]);
   const [url, setUrl] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,14 +29,26 @@ export default function HomeScreen() {
   const fetchProducts = async (targetIds: string[]) => {
     setLoading(true);
     try {
-      const results = await Promise.all(
-        targetIds.map(async (id) => {
-          const res = await fetch(
-            `https://snk-server.onrender.com/price/${id}`,
-          );
-          return await res.json();
-        }),
-      );
+      const results = [];
+
+      for (const id of targetIds) {
+        const apiUrl = `https://snk-server-1.onrender.com/price/${id}`;
+        console.log("fetch url:", apiUrl);
+
+        const res = await fetch(apiUrl);
+        console.log("status:", res.status);
+
+        const text = await res.text();
+        console.log("raw:", text.slice(0, 100));
+
+        if (!text.startsWith("{")) {
+          console.log("JSONじゃない:", text);
+          continue;
+        }
+
+        results.push(JSON.parse(text));
+      }
+
       setProducts(results);
     } catch (err) {
       console.log("取得エラー", err);
@@ -47,13 +59,14 @@ export default function HomeScreen() {
 
   const loadIds = async () => {
     const saved = await AsyncStorage.getItem(STORAGE_KEY);
-    const loadedIds = saved ? JSON.parse(saved) : ["618443"];
+    const loadedIds = saved ? JSON.parse(saved) : [];
+
     setIds(loadedIds);
     fetchProducts(loadedIds);
   };
 
   const addProduct = async () => {
-    const match = url.match(/apparels\/(\d+)/);
+    const match = url.match(/(\d+)/);
     if (!match) return;
 
     const newId = match[1];
@@ -66,6 +79,7 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
+    console.log("HomeScreen start");
     loadIds();
   }, []);
 
