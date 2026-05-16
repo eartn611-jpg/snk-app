@@ -1,130 +1,158 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
+  Button,
   Image,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
-import { LineChart } from "react-native-chart-kit";
+
+type Product = {
+  id: string;
+  price: number | null;
+  name: string;
+  image: string | null;
+};
+
+const STORAGE_KEY = "product_ids";
 
 export default function HomeScreen() {
-  const [price, setPrice] = useState<number | null>(null);
-  const [name, setName] = useState<string | null>(null);
-  const [image, setImage] = useState<string | null>(null);
-  const [history, setHistory] = useState<number[]>([]);
+  const [ids, setIds] = useState<string[]>(["618443"]);
+  const [url, setUrl] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchProducts = async (targetIds: string[]) => {
+    setLoading(true);
+    try {
+      const results = await Promise.all(
+        targetIds.map(async (id) => {
+          const res = await fetch(
+            `https://snk-server.onrender.com/price/${id}`,
+          );
+          return await res.json();
+        }),
+      );
+      setProducts(results);
+    } catch (err) {
+      console.log("取得エラー", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadIds = async () => {
+    const saved = await AsyncStorage.getItem(STORAGE_KEY);
+    const loadedIds = saved ? JSON.parse(saved) : ["618443"];
+    setIds(loadedIds);
+    fetchProducts(loadedIds);
+  };
+
+  const addProduct = async () => {
+    const match = url.match(/apparels\/(\d+)/);
+    if (!match) return;
+
+    const newId = match[1];
+    const nextIds = Array.from(new Set([...ids, newId]));
+
+    setIds(nextIds);
+    setUrl("");
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(nextIds));
+    fetchProducts(nextIds);
+  };
 
   useEffect(() => {
-    const fetchData = () => {
-      fetch("https://snk-server.onrender.com/price")
-        .then((res) => res.json())
-        .then((data) => {
-          const newPrice = Number(data.price);
-
-          setPrice(newPrice);
-          setName(data.name);
-          setImage(data.image);
-
-          setHistory((prev) => [...prev.slice(-9), newPrice]);
-        })
-        .catch((err) => console.error(err));
-    };
-
-    fetchData();
-
-    const interval = setInterval(fetchData, 5000);
-
-    return () => clearInterval(interval);
+    loadIds();
   }, []);
 
-  if (!price) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.title}>SNKRDUNK 価格</Text>
-        <ActivityIndicator size="large" />
-        <Text style={styles.loading}>取得中...</Text>
-      </View>
-    );
-  }
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>SNKRDUNK 価格</Text>
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>商品一覧</Text>
 
-      {image && <Image source={{ uri: image }} style={styles.image} />}
+      <TextInput
+        style={styles.input}
+        placeholder="SNKRDUNKのURLを貼る"
+        value={url}
+        onChangeText={setUrl}
+      />
 
-      <Text style={styles.name}>{name}</Text>
+      <Button title="商品を追加" onPress={addProduct} />
 
-      <Text style={styles.price}>{price.toLocaleString()} 円</Text>
-
-      {history.length > 1 && (
-        <LineChart
-          data={{
-            labels: history.map((_, i) => `${i + 1}`),
-            datasets: [{ data: history }],
-          }}
-          width={Dimensions.get("window").width - 40}
-          height={220}
-          yAxisSuffix="円"
-          chartConfig={{
-            backgroundColor: "#ffffff",
-            backgroundGradientFrom: "#ffffff",
-            backgroundGradientTo: "#ffffff",
-            decimalPlaces: 0,
-            color: () => "#000",
-            labelColor: () => "#000",
-          }}
-          style={styles.chart}
-        />
+      {loading && (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" />
+          <Text>読み込み中...</Text>
+        </View>
       )}
-    </View>
+
+      {products.map((item) => (
+        <View key={item.id} style={styles.card}>
+          {item.image && (
+            <Image source={{ uri: item.image }} style={styles.image} />
+          )}
+
+          <Text style={styles.name}>{item.name}</Text>
+
+          <Text style={styles.price}>
+            {item.price ? `${item.price.toLocaleString()} 円` : "価格取得失敗"}
+          </Text>
+        </View>
+      ))}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-    backgroundColor: "#fff",
-  },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fff",
+    backgroundColor: "#ffffff",
+    padding: 12,
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
+    marginBottom: 15,
+    textAlign: "center",
     color: "#000",
   },
-  loading: {
-    marginTop: 10,
+  input: {
+    borderWidth: 1,
+    borderColor: "#aaa",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
     color: "#000",
+  },
+  center: {
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  card: {
+    backgroundColor: "#f5f5f5",
+    padding: 15,
+    marginTop: 15,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  image: {
+    width: 160,
+    height: 160,
+    resizeMode: "contain",
   },
   name: {
-    fontSize: 18,
+    fontSize: 16,
     marginTop: 10,
     textAlign: "center",
     color: "#000",
   },
   price: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "bold",
-    marginTop: 10,
+    marginTop: 8,
     color: "#000",
-  },
-  image: {
-    width: 200,
-    height: 200,
-    marginVertical: 10,
-    resizeMode: "contain",
-  },
-  chart: {
-    marginTop: 20,
-    borderRadius: 10,
   },
 });
