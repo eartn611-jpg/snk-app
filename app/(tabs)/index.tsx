@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Button,
+  Dimensions,
   Image,
   ScrollView,
   StyleSheet,
@@ -10,18 +11,20 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { LineChart } from "react-native-chart-kit";
 
 type Product = {
   id: string;
   price: number | null;
   name: string;
   image: string | null;
+  history: number[];
 };
 
 const STORAGE_KEY = "product_ids";
 
 export default function HomeScreen() {
-  const [ids, setIds] = useState<string[]>(["730956"]);
+  const [ids, setIds] = useState<string[]>([]);
   const [url, setUrl] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,24 +32,43 @@ export default function HomeScreen() {
   const fetchProducts = async (targetIds: string[]) => {
     setLoading(true);
     try {
-      const results = [];
+      const results: Product[] = [];
 
       for (const id of targetIds) {
         const apiUrl = `https://snk-server-1.onrender.com/price/${id}`;
         console.log("fetch url:", apiUrl);
 
         const res = await fetch(apiUrl);
-        console.log("status:", res.status);
-
         const text = await res.text();
-        console.log("raw:", text.slice(0, 100));
 
+        console.log("status:", res.status);
+        console.log("raw:", text.slice(0, 200));
+
+        // JSONじゃない（502やHTML）の場合
         if (!text.startsWith("{")) {
-          console.log("JSONじゃない:", text);
+          results.push({
+            id,
+            price: null,
+            name: "取得失敗",
+            image: null,
+            history: [],
+          });
           continue;
         }
 
-        results.push(JSON.parse(text));
+        const data = JSON.parse(text);
+
+        const existing = products.find((p) => p.id === id);
+        const history = existing?.history || [];
+
+        if (data.price) {
+          history.push(data.price);
+        }
+
+        results.push({
+          ...data,
+          history,
+        });
       }
 
       setProducts(results);
@@ -58,15 +80,14 @@ export default function HomeScreen() {
   };
 
   const loadIds = async () => {
-    const saved = await AsyncStorage.getItem(STORAGE_KEY);
-    const loadedIds = saved ? JSON.parse(saved) : [];
-
+    await AsyncStorage.removeItem(STORAGE_KEY);
+    const loadedIds = ["730956"];
     setIds(loadedIds);
     fetchProducts(loadedIds);
   };
 
   const addProduct = async () => {
-    const match = url.match(/(\d+)/);
+    const match = url.match(/apparels\/(\d+)(?:\?|$)/);
     if (!match) return;
 
     const newId = match[1];
@@ -79,7 +100,6 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    console.log("HomeScreen start");
     loadIds();
   }, []);
 
@@ -114,6 +134,27 @@ export default function HomeScreen() {
           <Text style={styles.price}>
             {item.price ? `${item.price.toLocaleString()} 円` : "価格取得失敗"}
           </Text>
+
+          {/* グラフ */}
+          {item.history.length > 1 && (
+            <LineChart
+              data={{
+                labels: item.history.map((_, i) => `${i + 1}`),
+                datasets: [{ data: item.history }],
+              }}
+              width={Dimensions.get("window").width - 40}
+              height={200}
+              yAxisSuffix="円"
+              chartConfig={{
+                backgroundColor: "#fff",
+                backgroundGradientFrom: "#fff",
+                backgroundGradientTo: "#fff",
+                decimalPlaces: 0,
+                color: () => "#ff0000",
+              }}
+              style={{ marginTop: 10 }}
+            />
+          )}
         </View>
       ))}
     </ScrollView>
@@ -131,7 +172,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 15,
     textAlign: "center",
-    color: "#000",
   },
   input: {
     borderWidth: 1,
@@ -139,7 +179,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 10,
     marginBottom: 10,
-    color: "#000",
   },
   center: {
     alignItems: "center",
@@ -161,12 +200,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 10,
     textAlign: "center",
-    color: "#000",
   },
   price: {
     fontSize: 22,
     fontWeight: "bold",
     marginTop: 8,
-    color: "#000",
   },
 });
